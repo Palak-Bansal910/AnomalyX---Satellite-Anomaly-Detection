@@ -1,5 +1,4 @@
 # dashboard/streamlit_app.py
-# dashboard/streamlit_app.py
 import time
 import requests
 import pandas as pd
@@ -14,38 +13,48 @@ BASE_URL = "http://127.0.0.1:8000"
 LATEST_ENDPOINT = f"{BASE_URL}/anomalies/latest"
 HISTORY_ENDPOINT = f"{BASE_URL}/anomalies/history?limit=500"
 
-st.set_page_config(page_title="🛰 Satellite Anomaly Detector", layout="wide")
+st.set_page_config(page_title="🛰 Satellite Anomaly Detector", layout="wide", initial_sidebar_state="expanded")
 
-# --- Custom minimal CSS for nicer look ---
+# --- Theme CSS: pure black + soft blue accent (#3A8DFF) ---
 st.markdown(
     """
     <style>
-    /* page background + card background */
+    :root {
+        --accent: #3A8DFF;
+        --panel: #0b0b0b;
+        --muted: rgba(230,238,243,0.6);
+        --panel-2: #101010;
+    }
+    /* app background */
     .stApp {
-        background: linear-gradient(180deg, #0f1724 0%, #07122a 100%);
+        background: #000000;
         color: #E6EEF3;
     }
+    /* cards */
     .card {
-        background: rgba(255,255,255,0.03);
+        background: var(--panel-2);
         border-radius: 10px;
         padding: 12px;
         margin-bottom: 12px;
-        box-shadow: 0 4px 10px rgba(2,6,23,0.6);
-        border: 1px solid rgba(255,255,255,0.03);
+        border: 1px solid rgba(255,255,255,0.04);
     }
     .side-card {
-        background: rgba(255,255,255,0.02);
+        background: var(--panel);
         border-radius: 10px;
-        padding: 16px;
+        padding: 14px;
         margin-bottom: 12px;
         border: 1px solid rgba(255,255,255,0.03);
     }
-    .small-muted { color: rgba(230,238,243,0.6); font-size:12px; }
-    .big-num { font-size: 36px; font-weight:700; color: #E6EEF3; }
+    .small-muted { color: var(--muted); font-size:12px; }
+    .big-num { font-size: 34px; font-weight:700; color: #E6EEF3; }
     .metric-label { color: rgba(230,238,243,0.65); font-size:12px; }
-    /* override streamlit default backgrounds for sidebar */
-    .css-1d392kg { background: transparent; }
-    .stSidebar .css-1d392kg { background: rgba(255,255,255,0.02); }
+    .accent { color: var(--accent); }
+    /* sidebar background */
+    .stSidebar .css-1d392kg { background: #070707; border-right: 1px solid rgba(255,255,255,0.02); }
+    /* minimize streamer default bright boxes */
+    .stButton>button { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.04); color: #E6EEF3; }
+    /* small tweaks to headings */
+    h1, .streamlit-expanderHeader { color: #E6EEF3; }
     </style>
     """,
     unsafe_allow_html=True,
@@ -79,7 +88,7 @@ def fetch_history():
 latest = fetch_latest()
 history = fetch_history()
 
-# build dataframe for UI controls
+# dataframe for controls
 df_hist = pd.DataFrame(history)
 if not df_hist.empty:
     try:
@@ -89,18 +98,14 @@ if not df_hist.empty:
 else:
     df_hist = pd.DataFrame(columns=["timestamp", "satellite_id", "severity", "issues", "score"])
 
-# LEFT: control panel (moved to left for ergonomics)
+# Controls in sidebar
 with st.sidebar:
     st.header("Controls")
     sats = sorted(df_hist['satellite_id'].unique().tolist()) if not df_hist.empty else []
     selected_sat = st.selectbox("Filter satellite", options=["All"] + sats)
-    play_toggle = st.checkbox("Play animation", value=False)
-    # slider for manual frame selection
+    play_toggle = st.checkbox("Play orbit animation", value=False)
     timestamps = sorted(df_hist['timestamp'].unique().tolist()) if not df_hist.empty else []
-    if timestamps:
-        slider_index = st.slider("Playback frame", 0, max(0, len(timestamps)-1), 0)
-    else:
-        slider_index = 0
+    slider_index = st.slider("Playback frame", 0, max(0, len(timestamps)-1), 0) if timestamps else 0
     st.markdown("---")
     st.write("Auto-refresh every ~4 seconds")
     st.markdown("<div class='small-muted'>Demo tips:</div>", unsafe_allow_html=True)
@@ -108,47 +113,89 @@ with st.sidebar:
     st.write("- Start simulator to stream telemetry")
     st.write("- Use Slack/email config in .env to enable push alerts")
 
-# MAIN layout: wider left area for cards + visualizations, right side for health
-left_col, right_col = st.columns([3.2, 1])
+# Tabs: Dashboard | Alerts | Satellites | Orbit | Predictions
+tabs = st.tabs(["Dashboard", "Alerts", "Satellites", "Orbit", "System Health"])
 
-with left_col:
+# ---- DASHBOARD tab (summary + small plots) ----
+with tabs[0]:
+    left, right = st.columns([3, 1])
+    with left:
+        st.subheader("Overview")
+        st.markdown("<div class='card'>", unsafe_allow_html=True)
+        # Summary metrics (leveraging health panel functions)
+        render_health_panel(df_hist, latest)
+        st.markdown("</div>", unsafe_allow_html=True)
+
+        st.markdown("### Recent score trend")
+        render_score_trend(df_hist)
+        st.markdown("---")
+        st.markdown("### Issue frequency (recent)")
+        render_issue_distribution(df_hist)
+
+    with right:
+        st.subheader("Quick Controls")
+        st.markdown("<div class='side-card'>", unsafe_allow_html=True)
+        st.write("Filter:", selected_sat)
+        st.write("Frames:", len(timestamps))
+        st.write("Play orbit:", play_toggle)
+        st.markdown("</div>", unsafe_allow_html=True)
+
+# ---- ALERTS tab ----
+with tabs[1]:
     st.subheader("Live Alerts")
     st.markdown("<div class='card'>", unsafe_allow_html=True)
     if not latest:
         st.info("No anomalies yet...")
     else:
-        # apply satellite filter to latest
         if selected_sat != "All":
             latest_filtered = [l for l in latest if l.get("satellite_id") == selected_sat]
         else:
             latest_filtered = latest
 
-        # compact grid: two columns for alert cards (adjust per item)
         for item in latest_filtered:
             render_alert_card(item, show_send_button=True)
     st.markdown("</div>", unsafe_allow_html=True)
 
-    st.markdown("---")
-    st.subheader("Anomaly Score Trend")
-    with st.container():
-        render_score_trend(df_hist)
+    st.markdown("### History (recent)")
+    if df_hist.empty:
+        st.info("No history available.")
+    else:
+        # show compact history - most recent 20
+        history_recent = df_hist.sort_values("timestamp", ascending=False).head(20)
+        for _, row in history_recent.iterrows():
+            # convert to expected item shape for card renderer
+            item = {
+                "timestamp": row.get("timestamp"),
+                "satellite_id": row.get("satellite_id"),
+                "severity": row.get("severity"),
+                "issues": row.get("issues"),
+                "score": row.get("score")
+            }
+            render_alert_card(item, show_send_button=False)
 
-    st.markdown("---")
-    st.subheader("Issue Frequency (Recent)")
-    with st.container():
-        render_issue_distribution(df_hist)
+# ---- SATELLITES tab ----
+with tabs[2]:
+    st.subheader("Satellite Data • Trends")
+    st.markdown("<div class='card'>", unsafe_allow_html=True)
+    # Plots already handle empty data
+    render_score_trend(df_hist)
+    render_issue_distribution(df_hist)
+    st.markdown("</div>", unsafe_allow_html=True)
 
-    st.markdown("---")
+# ---- ORBIT tab ----
+with tabs[3]:
     st.subheader("Orbit Visualizer")
     sel_sat = None if selected_sat == "All" else selected_sat
     render_orbit_visualizer(history, selected_satellite=sel_sat, play=play_toggle, slider_index=slider_index)
 
-with right_col:
+# ---- SYSTEM HEALTH tab ----
+with tabs[4]:
     st.subheader("System Health")
-    st.markdown("<div class='side-card'>", unsafe_allow_html=True)
+    st.markdown("<div class='card'>", unsafe_allow_html=True)
     render_health_panel(df_hist, latest)
     st.markdown("</div>", unsafe_allow_html=True)
 
-# auto refresh (non-blocking)
+# small non-blocking refresh
 if st.session_state.get("_auto_refresh", True):
-    time.sleep(0.1)
+    time.sleep(0.05)
+
