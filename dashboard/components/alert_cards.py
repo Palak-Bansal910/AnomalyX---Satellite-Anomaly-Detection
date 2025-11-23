@@ -10,6 +10,7 @@ SEVERITY_COLORS = {
     "warning": "#F1C40F",
     "critical": "#E74C3C"
 }
+ACCENT = "#3A8DFF"
 
 def _pretty_issues(issues):
     if not issues:
@@ -26,7 +27,6 @@ def _format_ts(ts):
         return str(ts)
 
 def send_alert_to_backend(item):
-    # build payload
     if "anomaly" in item:
         ann = item.get("anomaly", {})
         severity = ann.get("severity", "normal")
@@ -53,7 +53,6 @@ def send_alert_to_backend(item):
         return {"ok": False, "result": str(e)}
 
 def render_alert_card(item, show_send_button=True):
-    # support both latest format (nested anomaly) and flat history format
     if "anomaly" in item:
         ann = item.get("anomaly", {})
         severity = (ann.get("severity") or "normal").lower()
@@ -68,25 +67,24 @@ def render_alert_card(item, show_send_button=True):
     color = SEVERITY_COLORS.get(severity, "#95A5A6")
     ts = _format_ts(item.get("timestamp", ""))
 
-    # container card
     container = st.container()
     with container:
-        cols = st.columns([3.5, 0.9])
+        cols = st.columns([3.6, 0.9])
         with cols[0]:
             st.markdown(
                 f"""
-                <div style="border-left:6px solid {color}; padding:10px; margin-bottom:8px; border-radius:8px; background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));">
+                <div style="border-left:4px solid {color}; padding:10px; margin-bottom:8px; border-radius:8px; background:#070707;">
                     <div style="display:flex; justify-content:space-between; align-items:center;">
                         <div>
                             <strong style="font-size:14px;">Satellite: {item.get('satellite_id', 'unknown')}</strong><br>
-                            <span class="small-muted">{ts}</span>
+                            <span style="color:rgba(230,238,243,0.6); font-size:12px;">{ts}</span>
                         </div>
                         <div style="text-align:right;">
                             <div style="font-weight:700; color:{color}; text-transform:uppercase;">{severity}</div>
                             <div style="font-size:13px;">Score: {round(float(score or 0),2)}</div>
                         </div>
                     </div>
-                    <div style="margin-top:8px; color:rgba(230,238,243,0.85)"><strong>Issues:</strong> {_pretty_issues(issues)}</div>
+                    <div style="margin-top:8px; color:rgba(230,238,243,0.9)"><strong>Issues:</strong> {_pretty_issues(issues)}</div>
                 </div>
                 """,
                 unsafe_allow_html=True,
