@@ -2,9 +2,10 @@
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from datetime import datetime
+from fastapi import Query
 from backend.services.preprocess import preprocess_telemetry
 from backend.services.anomaly_engine import compute_anomaly
-from backend.services.state import add_anomaly_record
+from backend.services.state import add_anomaly_record, add_telemetry_record, get_latest_telemetry
 from backend.core.database import SessionLocal     # adjust name if your file is database.py
 from backend.core.models import AnomalyEvent
 from ...core.logger import logger
@@ -46,6 +47,11 @@ async def receive_telemetry(data: TelemetrySchema):
 
         # add to in-memory
         add_anomaly_record(record)
+        
+        # Store full telemetry with positions for orbit visualization
+        telemetry_record = data.dict()
+        telemetry_record["timestamp"] = data.timestamp
+        add_telemetry_record(telemetry_record)
 
         # persist to DB
         db = SessionLocal()
@@ -70,4 +76,27 @@ async def receive_telemetry(data: TelemetrySchema):
         return {"status": "ok", **record}
     except Exception as e:
         logger.error(f"Error in /telemetry: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/positions")
+def get_telemetry_positions(limit: int = Query(500, ge=1, le=1000)):
+    """Get recent telemetry records with position data for orbit visualization."""
+    try:
+        telemetry_records = get_latest_telemetry(limit=limit)
+        # Format for frontend - only include position and essential data
+        result = []
+        for record in telemetry_records:
+            result.append({
+                "timestamp": record.get("timestamp"),
+                "satellite_id": record.get("satellite_id"),
+                "position_x": record.get("position_x"),
+                "position_y": record.get("position_y"),
+                "position_z": record.get("position_z"),
+                "velocity_x": record.get("velocity_x"),
+                "velocity_y": record.get("velocity_y"),
+                "velocity_z": record.get("velocity_z"),
+            })
+        return {"data": result}
+    except Exception as e:
+        logger.error(f"Error in /telemetry/positions: {e}")
         raise HTTPException(status_code=500, detail=str(e))
