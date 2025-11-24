@@ -14,9 +14,9 @@ project/
 │-- dashboard/
 │-- simulator/
 │-- scripts/
-│   │-- start_backend.sh
-│   │-- start_dashboard.sh
-│   │-- start_simulator.sh
+│   │-- start_backend.bat
+│   │-- start_dashboard.bat
+│   │-- start_simulator.bat
 │-- data/
 │-- requirements.txt
 │-- Dockerfile
@@ -28,11 +28,11 @@ pip install -r backend/requirements.txt
  # 2.creation of .env file
 DB_URL=sqlite:///./data/anomalies.db
 # Start backend
-bash scripts/start_backend.sh
+bash scripts/start_backend.bat
 # Start dashboard
-bash scripts/start_dashboard.sh
+bash scripts/start_dashboard.bat
 # Start simulator
-bash scripts/start_simulator.sh
+bash scripts/start_simulator.bat
 # Docker
 docker build -t anomaly-backend .
 docker run -p 8000:8000 anomaly-backend
@@ -112,6 +112,7 @@ Fetches processed anomaly data from the backend
 Visualizes results through charts, graphs, tables
 
 Helps track anomalies in near real time
+
 
 
 
