@@ -1,6 +1,6 @@
 # Project Overview
 This system simulates satellite telemetry, detects anomalies using a FastAPI backend, 
-stores them in SQLite, and visualizes results in a Streamlit dashboard.
+stores them in SQLite, and visualizes results in a Streamlit dashboard . 
 
 ## Project Structure
 project/
